@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero rounded-4 p-4 p-md-5 mb-4">
+  <h1 class="display-6 mb-2">What's happening on campus?</h1>
+  <p class="lead mb-4">Find a workshop, match or meetup, grab a seat, and host your own.</p>
+
+  <form id="filter-form" method="get" action="{% url 'home' %}" data-api-url="{% url 'api_events' %}" class="row g-2" role="search">
+    <div class="col-12 col-md-7">
+      <label for="q" class="visually-hidden">Search events</label>
+      <input id="q" name="q" type="search" value="{{ q }}" class="form-control form-control-lg" placeholder="Search events">
+    </div>
+    <div class="col-8 col-md-3">
+      <label for="category" class="visually-hidden">Category</label>
+      <select id="category" name="category" class="form-select form-select-lg">
+        <option value="">All categories</option>
+        {% for c in categories %}
+          <option value="{{ c.pk }}" {% if category == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-4 col-md-2 d-grid">
+      <button class="btn btn-primary btn-lg" type="submit">Search</button>
+    </div>
+  </form>
+</section>
+
+<p id="result-count" class="text-body-secondary" aria-live="polite">{{ events|length }} upcoming event{{ events|length|pluralize }}</p>
+
+<div id="event-grid" class="row g-4">
+  {% for event in events %}
+    {% include "_event_card.html" %}
+  {% endfor %}
+</div>
+<p id="empty-note" class="text-center text-body-secondary py-5 {% if events %}d-none{% endif %}">No events match your search yet.</p>
+{% endblock %}

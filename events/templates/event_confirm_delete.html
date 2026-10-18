@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Delete event | Campus Event Hub{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <h1 class="h3 mb-3">Delete "{{ event.title }}"?</h1>
+    <p>This also removes every registration for it. It cannot be undone.</p>
+    <form method="post">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Yes, delete it</button>
+      <a class="btn btn-link" href="{{ event.get_absolute_url }}">Keep it</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

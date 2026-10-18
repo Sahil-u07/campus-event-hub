@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}My events | Campus Event Hub{% endblock %}
+{% block content %}
+<h1 class="mb-4">My events</h1>
+
+<h2 class="h4">I'm going to</h2>
+{% if registered %}
+  <div class="table-responsive mb-5">
+    <table class="table align-middle">
+      <thead><tr><th scope="col">Event</th><th scope="col">When</th><th scope="col">Venue</th></tr></thead>
+      <tbody>
+        {% for e in registered %}
+          <tr>
+            <td><a href="{{ e.get_absolute_url }}">{{ e.title }}</a></td>
+            <td>{{ e.start_at|date:"d M Y, h:i A" }}{% if e.is_past %} <span class="badge text-bg-secondary">Past</span>{% endif %}</td>
+            <td>{{ e.venue }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="text-body-secondary mb-5">Nothing yet. <a href="{% url 'home' %}">Browse events</a>.</p>
+{% endif %}
+
+<h2 class="h4">I'm hosting</h2>
+{% if hosted %}
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th scope="col">Event</th><th scope="col">When</th><th scope="col">Registered</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+        {% for e in hosted %}
+          <tr>
+            <td><a href="{{ e.get_absolute_url }}">{{ e.title }}</a></td>
+            <td>{{ e.start_at|date:"d M Y, h:i A" }}</td>
+            <td>{{ e.booked }} / {{ e.capacity }}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-primary" href="{% url 'event_edit' e.pk %}">Edit</a>
+              <a class="btn btn-sm btn-outline-danger" href="{% url 'event_delete' e.pk %}">Delete</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="text-body-secondary">You haven't hosted anything. <a href="{% url 'event_create' %}">Host an event</a>.</p>
+{% endif %}
+{% endblock %}

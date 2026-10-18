@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ event.title }} | Campus Event Hub{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Events</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ event.title }}</li>
+  </ol>
+</nav>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <span class="badge badge-category mb-2">{{ event.category.name }}</span>
+    <h1 class="mb-3">{{ event.title }}</h1>
+    <p class="text-body-secondary mb-1"><i class="bi bi-clock" aria-hidden="true"></i> {{ event.start_at|date:"l, d F Y, h:i A" }}</p>
+    <p class="text-body-secondary mb-4"><i class="bi bi-geo-alt" aria-hidden="true"></i> {{ event.venue }}</p>
+    <div class="mb-4">{{ event.description|linebreaks }}</div>
+    <p class="small text-body-secondary">Hosted by <strong>{{ event.organiser.username }}</strong></p>
+  </div>
+
+  <div class="col-lg-4">
+    <aside class="card side-card">
+      <div class="card-body">
+        <p class="mb-1 text-body-secondary">Seats left</p>
+        <p class="display-5 mb-3"><span id="seats-left">{{ event.seats_left }}</span> <span class="fs-6 text-body-secondary">of {{ event.capacity }}</span></p>
+
+        {% if event.is_past %}
+          <button class="btn btn-secondary w-100" disabled>This event has ended</button>
+        {% elif user.is_authenticated %}
+          <button id="register-btn" type="button" class="btn w-100 {% if registered %}btn-outline-danger{% else %}btn-primary{% endif %}"
+                  data-register-url="{% url 'api_register' event.pk %}"
+                  data-cancel-url="{% url 'api_cancel' event.pk %}"
+                  data-registered="{{ registered|yesno:'1,0' }}">
+            {% if registered %}Cancel my registration{% else %}Register for this event{% endif %}
+          </button>
+          <p id="register-msg" class="small mt-2 mb-0" role="status" aria-live="polite"></p>
+        {% else %}
+          <a class="btn btn-primary w-100" href="{% url 'login' %}?next={{ request.path }}">Log in to register</a>
+        {% endif %}
+      </div>
+    </aside>
+
+    {% if user == event.organiser %}
+      <div class="d-flex gap-2 mt-3">
+        <a class="btn btn-outline-primary flex-fill" href="{% url 'event_edit' event.pk %}">Edit</a>
+        <a class="btn btn-outline-danger flex-fill" href="{% url 'event_delete' event.pk %}">Delete</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

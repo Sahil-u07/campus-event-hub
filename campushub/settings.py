@@ -3,6 +3,7 @@
 import os
 import sys
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import dj_database_url
 import pymysql
@@ -76,13 +77,27 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "campushub.wsgi.application"
 
-# Database: DATABASE_URL (hosted Postgres) wins, otherwise local MySQL.
+def _clean_db_url(url):
+    # Supabase adds a "supa=..." query option that psycopg rejects
+    parts = urlsplit(url)
+    query = [(k, v) for k, v in parse_qsl(parts.query) if k != "supa"]
+    return urlunsplit(parts._replace(query=urlencode(query)))
+
+
+HOSTED_DB_URL = _clean_db_url(
+    os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL") or ""
+)
+
+# Database: a hosted Postgres URL wins (DATABASE_URL, or POSTGRES_URL which the
+# Vercel Supabase integration sets), otherwise local MySQL, otherwise SQLite.
 # `manage.py test` always runs on throwaway SQLite so it needs no server.
 if "test" in sys.argv:
     DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
     PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]  # faster tests
-elif os.environ.get("DATABASE_URL"):
-    DATABASES = {"default": dj_database_url.config(conn_max_age=60)}
+elif HOSTED_DB_URL:
+    # conn_max_age=0 and no server-side cursors: works behind a pgbouncer pooler
+    DATABASES = {"default": dj_database_url.parse(HOSTED_DB_URL, conn_max_age=0)}
+    DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 elif os.environ.get("DB_NAME"):
     DATABASES = {
         "default": {

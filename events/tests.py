@@ -706,3 +706,21 @@ from django.core.mail.backends.base import BaseEmailBackend  # noqa: E402
 class BrokenBackend(BaseEmailBackend):
     def send_messages(self, email_messages):
         raise OSError("mail server is down")
+
+
+class NotificationTimeLabelTests(TestCase):
+    def test_a_fresh_notification_says_just_now_not_zero_minutes(self):
+        user = make_user("fresh")
+        Notification.objects.create(user=user, message="hello")
+        self.client.force_login(user)
+        page = self.client.get(reverse("notifications"))
+        self.assertContains(page, "just now")
+        self.assertNotContains(page, "0 minutes")
+        self.assertNotContains(page, "0 minutes")
+
+    def test_older_notifications_show_how_long_ago(self):
+        user = make_user("older")
+        note = Notification.objects.create(user=user, message="old news")
+        Notification.objects.filter(pk=note.pk).update(created_at=timezone.now() - timedelta(minutes=10))
+        self.client.force_login(user)
+        self.assertContains(self.client.get(reverse("notifications")), "10 minutes ago")

@@ -9,7 +9,7 @@
         <i class="bi {% if n.pk in unread %}bi-bell-fill{% else %}bi-bell{% endif %} note-icon" aria-hidden="true"></i>
         <div>
           {% if n.url %}<a class="note-text" href="{{ n.url }}">{{ n.message }}</a>{% else %}<span class="note-text">{{ n.message }}</span>{% endif %}
-          <span class="note-time">{% with t=n.created_at|timesince %}{% if t == "0 minutes" %}just now{% else %}{{ t }} ago{% endif %}{% endwith %}{% if n.pk in unread %} &middot; new{% endif %}</span>
+          <span class="note-time">{% with t=n.created_at|timesince %}{% if t|first == "0" %}just now{% else %}{{ t }} ago{% endif %}{% endwith %}{% if n.pk in unread %} &middot; new{% endif %}</span>
         </div>
       </div>
     {% endfor %}

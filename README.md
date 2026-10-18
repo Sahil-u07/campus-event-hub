@@ -6,6 +6,7 @@ A web app where students find campus events, register for a seat, and host their
 **Live site:** https://campus-event-hub-lake.vercel.app
 **Source code:** https://github.com/Sahil-u07/campus-event-hub
 **Documentation:** [3-page project document (PDF)](docs/Campus-Event-Hub-Documentation.pdf), also as [Word file](docs/Campus-Event-Hub-Documentation.docx)
+**Presentation:** [14-slide deck (PowerPoint)](docs/Campus-Event-Hub-Presentation.pptx)
 
 | Dark | Light |
 |---|---|
@@ -137,7 +138,7 @@ set DB_PASSWORD=your-password
 set DB_HOST=127.0.0.1
 ```
 
-**Tests:** `python manage.py test` (82 tests: registration and waitlist rules, notifications and email, JSON API, filters and paging, saved events, calendar file, host dashboard and CSV, permissions, forms; they run on in-memory SQLite).
+**Tests:** `python manage.py test` (84 tests: registration and waitlist rules, notifications and email, JSON API, filters and paging, saved events, calendar file, host dashboard and CSV, permissions, forms; they run on in-memory SQLite).
 
 ## Deployment (Vercel)
 

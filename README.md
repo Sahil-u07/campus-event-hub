@@ -3,7 +3,7 @@
 A web app where students find campus events, register for a seat, and host their own events. Built for the **Web Technologies (AIM3140)** project, B.Tech AIML, Manipal University Jaipur.
 
 **Author:** Sahil
-**Live site:** LIVE_URL_HERE
+**Live site:** https://campus-event-hub-lake.vercel.app
 **Source code:** https://github.com/Sahil-u07/campus-event-hub
 
 ![Home page](docs/screenshots/home.png)
@@ -125,7 +125,7 @@ Vercel finds `manage.py` and runs the project as a serverless function. Its disk
 |---|---|
 | `DATABASE_URL` | Connection string of the hosted PostgreSQL database |
 | `SECRET_KEY` | A long random string |
-| `CSRF_TRUSTED_ORIGINS` | `https://<your-project>.vercel.app` |
+| `CSRF_TRUSTED_ORIGINS` | `https://campus-event-hub-lake.vercel.app` |
 
 `DEBUG` is off automatically on Vercel. `vercel.json` runs `migrate` and `seed_demo` on every deploy, so the tables and the sample events are created in the hosted database without any manual step (`seed_demo` skips events that already exist).
 

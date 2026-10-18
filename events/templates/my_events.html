@@ -1,49 +1,65 @@
 {% extends "base.html" %}
 {% block title %}My events | Campus Event Hub{% endblock %}
 {% block content %}
-<h1 class="mb-4">My events</h1>
+<h1 class="h2 mb-4">My events</h1>
 
-<h2 class="h4">I'm going to</h2>
-{% if registered %}
-  <div class="table-responsive mb-5">
-    <table class="table align-middle">
-      <thead><tr><th scope="col">Event</th><th scope="col">When</th><th scope="col">Venue</th></tr></thead>
-      <tbody>
-        {% for e in registered %}
-          <tr>
-            <td><a href="{{ e.get_absolute_url }}">{{ e.title }}</a></td>
-            <td>{{ e.start_at|date:"d M Y, h:i A" }}{% if e.is_past %} <span class="badge text-bg-secondary">Past</span>{% endif %}</td>
-            <td>{{ e.venue }}</td>
-          </tr>
+<ul class="nav nav-pills mb-4 tab-pills" id="mine-tabs" role="tablist">
+  <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-going" type="button" role="tab" aria-controls="tab-going" aria-selected="true">Going <span class="count-pill">{{ going|length }}</span></button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-waiting" type="button" role="tab" aria-controls="tab-waiting" aria-selected="false">Waitlist <span class="count-pill">{{ waiting|length }}</span></button></li>
+  <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-hosting" type="button" role="tab" aria-controls="tab-hosting" aria-selected="false">Hosting <span class="count-pill">{{ hosted|length }}</span></button></li>
+</ul>
+
+<div class="tab-content">
+  <div class="tab-pane fade show active" id="tab-going" role="tabpanel">
+    {% if going %}
+      <div class="list-stack">
+        {% for r in going %}
+          <a class="list-row" href="{{ r.event.get_absolute_url }}" style="--h: {{ r.event.hue }}">
+            <span class="list-title">{{ r.event.title }}</span>
+            <span class="list-meta"><i class="bi bi-clock" aria-hidden="true"></i> {{ r.event.start_at|date:"D, d M, h:i A" }} &middot; {{ r.event.venue }}</span>
+            {% if r.event.is_past %}<span class="badge text-bg-secondary">Past</span>{% else %}<span class="badge badge-ok">Confirmed</span>{% endif %}
+          </a>
         {% endfor %}
-      </tbody>
-    </table>
+      </div>
+    {% else %}
+      <div class="empty-state"><h2 class="h5">No registrations yet</h2><p class="text-body-secondary mb-3">Find something to go to.</p><a class="btn btn-primary" href="{% url 'home' %}">Browse events</a></div>
+    {% endif %}
   </div>
-{% else %}
-  <p class="text-body-secondary mb-5">Nothing yet. <a href="{% url 'home' %}">Browse events</a>.</p>
-{% endif %}
 
-<h2 class="h4">I'm hosting</h2>
-{% if hosted %}
-  <div class="table-responsive">
-    <table class="table align-middle">
-      <thead><tr><th scope="col">Event</th><th scope="col">When</th><th scope="col">Registered</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-      <tbody>
+  <div class="tab-pane fade" id="tab-waiting" role="tabpanel">
+    {% if waiting %}
+      <div class="list-stack">
+        {% for r in waiting %}
+          <a class="list-row" href="{{ r.event.get_absolute_url }}" style="--h: {{ r.event.hue }}">
+            <span class="list-title">{{ r.event.title }}</span>
+            <span class="list-meta"><i class="bi bi-clock" aria-hidden="true"></i> {{ r.event.start_at|date:"D, d M, h:i A" }} &middot; {{ r.event.venue }}</span>
+            <span class="badge badge-wait">Waitlist #{{ r.waitlist_position }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state"><h2 class="h5">You are not on any waitlist</h2><p class="text-body-secondary mb-0">If an event is full, join its waitlist and you move up when someone cancels.</p></div>
+    {% endif %}
+  </div>
+
+  <div class="tab-pane fade" id="tab-hosting" role="tabpanel">
+    {% if hosted %}
+      <div class="list-stack">
         {% for e in hosted %}
-          <tr>
-            <td><a href="{{ e.get_absolute_url }}">{{ e.title }}</a></td>
-            <td>{{ e.start_at|date:"d M Y, h:i A" }}</td>
-            <td>{{ e.booked }} / {{ e.capacity }}</td>
-            <td class="text-end">
+          <div class="list-row" style="--h: {{ e.hue }}">
+            <a class="list-title stretched-link" href="{{ e.get_absolute_url }}">{{ e.title }}</a>
+            <span class="list-meta"><i class="bi bi-clock" aria-hidden="true"></i> {{ e.start_at|date:"D, d M, h:i A" }} &middot; {{ e.booked }}/{{ e.capacity }} seats{% if e.waiting %} &middot; {{ e.waiting }} waiting{% endif %}</span>
+            <span class="row-actions">
+              <a class="btn btn-sm btn-outline-primary" href="{% url 'event_attendees' e.pk %}">Attendees</a>
               <a class="btn btn-sm btn-outline-primary" href="{% url 'event_edit' e.pk %}">Edit</a>
               <a class="btn btn-sm btn-outline-danger" href="{% url 'event_delete' e.pk %}">Delete</a>
-            </td>
-          </tr>
+            </span>
+          </div>
         {% endfor %}
-      </tbody>
-    </table>
+      </div>
+    {% else %}
+      <div class="empty-state"><h2 class="h5">You are not hosting anything</h2><p class="text-body-secondary mb-3">Got an idea for a workshop or meetup?</p><a class="btn btn-accent" href="{% url 'event_create' %}">Host an event</a></div>
+    {% endif %}
   </div>
-{% else %}
-  <p class="text-body-secondary">You haven't hosted anything. <a href="{% url 'event_create' %}">Host an event</a>.</p>
-{% endif %}
+</div>
 {% endblock %}

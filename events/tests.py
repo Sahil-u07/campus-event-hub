@@ -1,11 +1,14 @@
+import csv
+import io
 from datetime import timedelta
+from datetime import timezone as dt_timezone
 
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Category, Event, Registration
+from .models import Category, Event, Registration, SavedEvent
 
 
 def make_event(organiser, **kw):
@@ -23,99 +26,146 @@ def make_event(organiser, **kw):
     return Event.objects.create(**data)
 
 
+def make_user(name):
+    return User.objects.create_user(name, password="pw12345!")
+
+
+def register(event, user, status=Registration.CONFIRMED):
+    return Registration.objects.create(event=event, user=user, status=status)
+
+
 class ModelTests(TestCase):
     def setUp(self):
-        self.host = User.objects.create_user("host", password="pw12345!")
+        self.host = make_user("host")
         self.event = make_event(self.host)
 
-    def test_seats_left_drops_with_registrations(self):
+    def test_seats_left_drops_with_confirmed_registrations(self):
         self.assertEqual(self.event.seats_left, 2)
-        u = User.objects.create_user("a", password="pw12345!")
-        Registration.objects.create(event=self.event, user=u)
+        register(self.event, make_user("a"))
         self.assertEqual(self.event.seats_left, 1)
 
+    def test_waitlisted_people_do_not_use_seats(self):
+        register(self.event, make_user("a"), Registration.WAITLISTED)
+        self.assertEqual(self.event.seats_left, 2)
+
     def test_same_user_cannot_register_twice_at_db_level(self):
-        u = User.objects.create_user("a", password="pw12345!")
-        Registration.objects.create(event=self.event, user=u)
+        u = make_user("a")
+        register(self.event, u)
         with self.assertRaises(Exception):
-            Registration.objects.create(event=self.event, user=u)
+            register(self.event, u)
+
+    def test_promote_waitlist_fills_free_seats_in_order(self):
+        first, second, third = make_user("a"), make_user("b"), make_user("c")
+        r1 = register(self.event, first, Registration.WAITLISTED)
+        r2 = register(self.event, second, Registration.WAITLISTED)
+        r3 = register(self.event, third, Registration.WAITLISTED)
+        self.event.promote_waitlist()
+        for r in (r1, r2, r3):
+            r.refresh_from_db()
+        self.assertEqual(
+            [r1.status, r2.status, r3.status],
+            ["confirmed", "confirmed", "waitlisted"],
+        )
 
 
 class RegisterApiTests(TestCase):
     def setUp(self):
-        self.host = User.objects.create_user("host", password="pw12345!")
-        self.u1 = User.objects.create_user("u1", password="pw12345!")
-        self.u2 = User.objects.create_user("u2", password="pw12345!")
-        self.u3 = User.objects.create_user("u3", password="pw12345!")
+        self.host = make_user("host")
+        self.u1, self.u2, self.u3 = make_user("u1"), make_user("u2"), make_user("u3")
         self.event = make_event(self.host, capacity=2)
         self.reg = reverse("api_register", args=[self.event.pk])
         self.cancel = reverse("api_cancel", args=[self.event.pk])
 
+    def post_as(self, user, url):
+        self.client.force_login(user)
+        return self.client.post(url)
+
     def test_anonymous_gets_401(self):
-        r = self.client.post(self.reg)
-        self.assertEqual(r.status_code, 401)
+        self.assertEqual(self.client.post(self.reg).status_code, 401)
 
     def test_get_not_allowed(self):
         self.client.force_login(self.u1)
         self.assertEqual(self.client.get(self.reg).status_code, 405)
 
-    def test_register_returns_seats_left(self):
-        self.client.force_login(self.u1)
-        r = self.client.post(self.reg)
+    def test_register_returns_confirmed_state(self):
+        r = self.post_as(self.u1, self.reg)
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json(), {"registered": True, "seats_left": 1})
+        self.assertEqual(r.json(), {"state": "confirmed", "seats_left": 1, "position": 0})
 
     def test_double_register_is_rejected(self):
-        self.client.force_login(self.u1)
-        self.client.post(self.reg)
-        r = self.client.post(self.reg)
+        self.post_as(self.u1, self.reg)
+        r = self.post_as(self.u1, self.reg)
         self.assertEqual(r.status_code, 400)
         self.assertEqual(Registration.objects.count(), 1)
 
-    def test_full_event_rejects_new_registration(self):
+    def test_full_event_puts_person_on_waitlist(self):
+        self.post_as(self.u1, self.reg)
+        self.post_as(self.u2, self.reg)
+        r = self.post_as(self.u3, self.reg)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"state": "waitlisted", "seats_left": 0, "position": 1})
+
+    def test_waitlist_positions_follow_join_order(self):
         for u in (self.u1, self.u2):
-            self.client.force_login(u)
-            self.client.post(self.reg)
-        self.client.force_login(self.u3)
-        r = self.client.post(self.reg)
-        self.assertEqual(r.status_code, 400)
-        self.assertIn("full", r.json()["error"].lower())
+            self.post_as(u, self.reg)
+        self.post_as(self.u3, self.reg)
+        late = make_user("late")
+        r = self.post_as(late, self.reg)
+        self.assertEqual(r.json()["position"], 2)
 
     def test_past_event_rejects_registration(self):
         past = make_event(self.host, start_at=timezone.now() - timedelta(days=1))
-        self.client.force_login(self.u1)
-        r = self.client.post(reverse("api_register", args=[past.pk]))
+        r = self.post_as(self.u1, reverse("api_register", args=[past.pk]))
         self.assertEqual(r.status_code, 400)
 
     def test_cancel_frees_a_seat(self):
-        self.client.force_login(self.u1)
-        self.client.post(self.reg)
-        r = self.client.post(self.cancel)
-        self.assertEqual(r.json(), {"registered": False, "seats_left": 2})
+        self.post_as(self.u1, self.reg)
+        r = self.post_as(self.u1, self.cancel)
+        self.assertEqual(r.json(), {"state": "none", "seats_left": 2, "position": 0})
+
+    def test_cancel_promotes_first_person_on_waitlist(self):
+        self.post_as(self.u1, self.reg)
+        self.post_as(self.u2, self.reg)
+        self.post_as(self.u3, self.reg)  # waitlisted
+        r = self.post_as(self.u1, self.cancel)
+        self.assertEqual(r.json()["seats_left"], 0)
+        self.assertEqual(
+            Registration.objects.get(user=self.u3).status, Registration.CONFIRMED
+        )
+
+    def test_leaving_the_waitlist_does_not_free_a_seat(self):
+        self.post_as(self.u1, self.reg)
+        self.post_as(self.u2, self.reg)
+        self.post_as(self.u3, self.reg)  # waitlisted
+        r = self.post_as(self.u3, self.cancel)
+        self.assertEqual(r.json(), {"state": "none", "seats_left": 0, "position": 0})
+        self.assertEqual(Registration.objects.count(), 2)
 
     def test_cancel_without_registration_is_rejected(self):
-        self.client.force_login(self.u1)
-        self.assertEqual(self.client.post(self.cancel).status_code, 400)
+        self.assertEqual(self.post_as(self.u1, self.cancel).status_code, 400)
 
 
 class ListApiTests(TestCase):
     def setUp(self):
-        host = User.objects.create_user("host", password="pw12345!")
+        self.host = make_user("host")
         self.tech = Category.objects.create(name="Tech")
         self.art = Category.objects.create(name="Art")
-        make_event(host, title="Python Workshop", category=self.tech)
-        make_event(host, title="Poster Making", category=self.art)
+        make_event(self.host, title="Python Workshop", category=self.tech)
+        make_event(self.host, title="Poster Making", category=self.art)
         make_event(
-            host,
+            self.host,
             title="Old Meetup",
             category=self.tech,
             start_at=timezone.now() - timedelta(days=5),
         )
 
-    def titles(self, **params):
+    def get(self, **params):
         r = self.client.get(reverse("api_events"), params)
         self.assertEqual(r.status_code, 200)
-        return [e["title"] for e in r.json()["events"]]
+        return r.json()
+
+    def titles(self, **params):
+        return [e["title"] for e in self.get(**params)["events"]]
 
     def test_lists_upcoming_only(self):
         self.assertCountEqual(self.titles(), ["Python Workshop", "Poster Making"])
@@ -128,19 +178,99 @@ class ListApiTests(TestCase):
 
     def test_bad_category_value_is_ignored(self):
         self.assertEqual(len(self.titles(category="abc")), 2)
-        self.assertEqual(len(self.titles(category="\u00b2")), 2)  # superscript two
+        self.assertEqual(len(self.titles(category="²")), 2)  # superscript two
+
+    def test_default_order_is_soonest_first(self):
+        make_event(self.host, title="Tomorrow", start_at=timezone.now() + timedelta(days=1))
+        self.assertEqual(self.titles()[0], "Tomorrow")
+
+    def test_popular_sort_puts_most_registered_first(self):
+        quiet = make_event(self.host, title="Quiet", capacity=10)
+        busy = make_event(
+            self.host, title="Busy", capacity=10,
+            start_at=timezone.now() + timedelta(days=9),
+        )
+        register(busy, make_user("a"))
+        register(busy, make_user("b"))
+        register(quiet, make_user("c"))
+        self.assertEqual(self.titles(sort="popular")[:2], ["Busy", "Quiet"])
+
+    def test_week_filter_excludes_later_events(self):
+        make_event(self.host, title="Far away", start_at=timezone.now() + timedelta(days=20))
+        self.assertNotIn("Far away", self.titles(when="week"))
+        self.assertIn("Far away", self.titles(when="later"))
+        self.assertIn("Python Workshop", self.titles(when="week"))
+
+    def test_today_filter_only_returns_todays_events(self):
+        end_of_day = timezone.localtime().replace(hour=23, minute=59, second=0, microsecond=0)
+        if end_of_day - timezone.now() < timedelta(minutes=3):
+            self.skipTest("too close to midnight")
+        make_event(self.host, title="Tonight", start_at=end_of_day)
+        self.assertEqual(self.titles(when="today"), ["Tonight"])
+
+    def test_available_filter_hides_full_events(self):
+        full = make_event(self.host, title="Sold out", capacity=1)
+        register(full, make_user("a"))
+        self.assertNotIn("Sold out", self.titles(available="1"))
+        self.assertIn("Sold out", self.titles())
+
+    def test_available_filter_ignores_waitlisted_people(self):
+        e = make_event(self.host, title="Has room", capacity=2)
+        register(e, make_user("a"), Registration.WAITLISTED)
+        self.assertIn("Has room", self.titles(available="1"))
+
+    def test_paging(self):
+        for i in range(10):
+            make_event(self.host, title=f"Extra {i}", start_at=timezone.now() + timedelta(days=5, hours=i))
+        first = self.get()
+        self.assertEqual((len(first["events"]), first["has_next"], first["total"]), (9, True, 12))
+        second = self.get(page=2)
+        self.assertEqual((len(second["events"]), second["has_next"]), (3, False))
+
+    def test_bad_page_value_falls_back_to_first_page(self):
+        self.assertEqual(len(self.get(page="abc")["events"]), 2)
+        self.assertEqual(self.get(page=99)["events"], [])
+
+    def test_saved_flag_is_per_user(self):
+        user = make_user("fan")
+        SavedEvent.objects.create(user=user, event=Event.objects.get(title="Poster Making"))
+        self.assertTrue(all(e["saved"] is False for e in self.get()["events"]))
+        self.client.force_login(user)
+        flags = {e["title"]: e["saved"] for e in self.get()["events"]}
+        self.assertEqual(flags, {"Python Workshop": False, "Poster Making": True})
 
 
 class EventPageTests(TestCase):
     def setUp(self):
-        self.host = User.objects.create_user("host", password="pw12345!")
-        self.other = User.objects.create_user("other", password="pw12345!")
+        self.host = make_user("host")
+        self.other = make_user("other")
         self.event = make_event(self.host)
+
+    def form_data(self, **kw):
+        cat = self.event.category
+        when = (timezone.now() + timedelta(days=2)).strftime("%Y-%m-%dT%H:%M")
+        data = dict(title="Cricket", description="Friendly", venue="Ground",
+                    start_at=when, capacity=20, category=cat.pk)
+        data.update(kw)
+        return data
 
     def test_home_and_detail_render(self):
         self.assertContains(self.client.get(reverse("home")), "Hack Night")
         r = self.client.get(reverse("event_detail", args=[self.event.pk]))
         self.assertContains(r, "Lab 2")
+
+    def test_home_keeps_filters_from_the_url(self):
+        r = self.client.get(reverse("home"), {"q": "nomatch"})
+        self.assertNotContains(r, "Hack Night")
+        self.assertContains(r, 'value="nomatch"')
+
+    def test_detail_shows_waitlist_state_for_waitlisted_user(self):
+        register(self.event, make_user("a"))
+        register(self.event, make_user("b"))
+        register(self.event, self.other, Registration.WAITLISTED)
+        self.client.force_login(self.other)
+        r = self.client.get(reverse("event_detail", args=[self.event.pk]))
+        self.assertContains(r, 'data-state="waitlisted"')
 
     def test_create_requires_login(self):
         r = self.client.get(reverse("event_create"))
@@ -148,38 +278,21 @@ class EventPageTests(TestCase):
         self.assertIn("/login/", r["Location"])
 
     def test_create_sets_logged_in_user_as_organiser(self):
-        cat = Category.objects.create(name="Sports")
         self.client.force_login(self.other)
-        when = (timezone.now() + timedelta(days=2)).strftime("%Y-%m-%dT%H:%M")
-        r = self.client.post(
-            reverse("event_create"),
-            dict(title="Cricket", description="Friendly", venue="Ground",
-                 start_at=when, capacity=20, category=cat.pk),
-        )
+        r = self.client.post(reverse("event_create"), self.form_data())
         self.assertEqual(r.status_code, 302)
         self.assertEqual(Event.objects.get(title="Cricket").organiser, self.other)
 
     def test_capacity_must_be_positive(self):
-        cat = Category.objects.create(name="Sports")
         self.client.force_login(self.other)
-        when = (timezone.now() + timedelta(days=2)).strftime("%Y-%m-%dT%H:%M")
-        r = self.client.post(
-            reverse("event_create"),
-            dict(title="Cricket", description="x", venue="Ground",
-                 start_at=when, capacity=0, category=cat.pk),
-        )
+        r = self.client.post(reverse("event_create"), self.form_data(capacity=0))
         self.assertEqual(r.status_code, 200)
         self.assertFalse(Event.objects.filter(title="Cricket").exists())
 
     def test_new_event_cannot_start_in_the_past(self):
-        cat = Category.objects.create(name="Sports")
         self.client.force_login(self.other)
         when = (timezone.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
-        r = self.client.post(
-            reverse("event_create"),
-            dict(title="Cricket", description="x", venue="Ground",
-                 start_at=when, capacity=5, category=cat.pk),
-        )
+        r = self.client.post(reverse("event_create"), self.form_data(start_at=when))
         self.assertEqual(r.status_code, 200)
         self.assertFalse(Event.objects.filter(title="Cricket").exists())
 
@@ -199,26 +312,167 @@ class EventPageTests(TestCase):
         self.assertEqual(r.status_code, 302)
         self.assertFalse(Event.objects.filter(pk=self.event.pk).exists())
 
-    def test_capacity_cannot_drop_below_registered(self):
-        u = User.objects.create_user("a", password="pw12345!")
-        v = User.objects.create_user("b", password="pw12345!")
-        Registration.objects.create(event=self.event, user=u)
-        Registration.objects.create(event=self.event, user=v)
+    def edit(self, **kw):
         self.client.force_login(self.host)
-        when = self.event.start_at.astimezone().strftime("%Y-%m-%dT%H:%M")
-        r = self.client.post(
-            reverse("event_edit", args=[self.event.pk]),
-            dict(title="Hack Night", description="x", venue="Lab 2",
-                 start_at=when, capacity=1, category=self.event.category.pk),
-        )
+        when = timezone.localtime(self.event.start_at).strftime("%Y-%m-%dT%H:%M")
+        data = dict(title="Hack Night", description="x", venue="Lab 2", start_at=when,
+                    capacity=2, category=self.event.category.pk)
+        data.update(kw)
+        return self.client.post(reverse("event_edit", args=[self.event.pk]), data)
+
+    def test_capacity_cannot_drop_below_confirmed_count(self):
+        register(self.event, make_user("a"))
+        register(self.event, make_user("b"))
+        r = self.edit(capacity=1)
         self.assertEqual(r.status_code, 200)
         self.event.refresh_from_db()
         self.assertEqual(self.event.capacity, 2)
 
-    def test_my_events_lists_registered_and_hosted(self):
-        Registration.objects.create(event=self.event, user=self.other)
+    def test_waitlisted_people_do_not_block_lowering_capacity(self):
+        register(self.event, make_user("a"))
+        register(self.event, make_user("b"), Registration.WAITLISTED)
+        self.assertEqual(self.edit(capacity=1).status_code, 302)
+
+    def test_raising_capacity_promotes_the_waitlist(self):
+        register(self.event, make_user("a"))
+        register(self.event, make_user("b"))
+        waiting = register(self.event, make_user("c"), Registration.WAITLISTED)
+        self.edit(capacity=3)
+        waiting.refresh_from_db()
+        self.assertEqual(waiting.status, Registration.CONFIRMED)
+
+    def test_my_events_lists_going_waitlist_and_hosted(self):
+        register(self.event, self.other)
+        other_event = make_event(self.host, title="Waitlist Party", capacity=1)
+        register(other_event, make_user("x"))
+        register(other_event, self.other, Registration.WAITLISTED)
         self.client.force_login(self.other)
-        self.assertContains(self.client.get(reverse("my_events")), "Hack Night")
+        r = self.client.get(reverse("my_events"))
+        self.assertContains(r, "Hack Night")
+        self.assertContains(r, "Waitlist Party")
+
+
+class SavedEventTests(TestCase):
+    def setUp(self):
+        self.host = make_user("host")
+        self.user = make_user("fan")
+        self.event = make_event(self.host)
+        self.url = reverse("api_save", args=[self.event.pk])
+
+    def test_anonymous_gets_401(self):
+        self.assertEqual(self.client.post(self.url).status_code, 401)
+
+    def test_get_not_allowed(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(self.url).status_code, 405)
+
+    def test_toggle_saves_then_unsaves(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.post(self.url).json(), {"saved": True})
+        self.assertEqual(SavedEvent.objects.count(), 1)
+        self.assertEqual(self.client.post(self.url).json(), {"saved": False})
+        self.assertEqual(SavedEvent.objects.count(), 0)
+
+    def test_saved_page_requires_login(self):
+        r = self.client.get(reverse("saved_events"))
+        self.assertEqual(r.status_code, 302)
+
+    def test_saved_page_lists_only_my_saved_events(self):
+        other_event = make_event(self.host, title="Not Mine")
+        SavedEvent.objects.create(user=self.user, event=self.event)
+        SavedEvent.objects.create(user=make_user("else"), event=other_event)
+        self.client.force_login(self.user)
+        r = self.client.get(reverse("saved_events"))
+        self.assertContains(r, "Hack Night")
+        self.assertNotContains(r, "Not Mine")
+
+
+class CalendarTests(TestCase):
+    def setUp(self):
+        self.event = make_event(
+            make_user("host"),
+            title="Intro, to; Django",
+            description="Line one\nLine two",
+            start_at=timezone.now().replace(microsecond=0) + timedelta(days=2),
+        )
+
+    def test_ics_download_has_event_details(self):
+        r = self.client.get(reverse("event_calendar", args=[self.event.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r["Content-Type"].startswith("text/calendar"))
+        body = r.content.decode()
+        self.assertIn("BEGIN:VEVENT", body)
+        self.assertIn("SUMMARY:Intro\\, to\\; Django", body)
+        self.assertIn("DESCRIPTION:Line one\\nLine two", body)
+        self.assertIn("LOCATION:Lab 2", body)
+        stamp = self.event.start_at.astimezone(dt_timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        self.assertIn(f"DTSTART:{stamp}", body)
+        self.assertIn("\r\n", body)
+
+    def test_ics_for_missing_event_is_404(self):
+        self.assertEqual(self.client.get(reverse("event_calendar", args=[9999])).status_code, 404)
+
+
+class DashboardTests(TestCase):
+    def setUp(self):
+        self.host = make_user("host")
+        self.other = make_user("other")
+        self.event = make_event(self.host, capacity=1)
+        self.going = register(self.event, make_user("alice"))
+        self.waiting = register(self.event, make_user("bob"), Registration.WAITLISTED)
+        self.page = reverse("event_attendees", args=[self.event.pk])
+        self.csv = reverse("event_attendees_csv", args=[self.event.pk])
+
+    def test_anonymous_is_sent_to_login(self):
+        self.assertEqual(self.client.get(self.page).status_code, 302)
+
+    def test_non_owner_is_forbidden(self):
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.get(self.page).status_code, 403)
+        self.assertEqual(self.client.get(self.csv).status_code, 403)
+
+    def test_owner_sees_confirmed_and_waitlisted_people(self):
+        self.client.force_login(self.host)
+        r = self.client.get(self.page)
+        self.assertContains(r, "alice")
+        self.assertContains(r, "bob")
+
+    def test_check_in_toggles_for_owner(self):
+        url = reverse("api_checkin", args=[self.going.pk])
+        self.client.force_login(self.host)
+        self.assertEqual(self.client.post(url).json(), {"checked_in": True})
+        self.assertEqual(self.client.post(url).json(), {"checked_in": False})
+
+    def test_check_in_is_owner_only(self):
+        url = reverse("api_checkin", args=[self.going.pk])
+        self.assertEqual(self.client.post(url).status_code, 401)
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.post(url).status_code, 403)
+        self.going.refresh_from_db()
+        self.assertFalse(self.going.checked_in)
+
+    def test_waitlisted_person_cannot_be_checked_in(self):
+        self.client.force_login(self.host)
+        r = self.client.post(reverse("api_checkin", args=[self.waiting.pk]))
+        self.assertEqual(r.status_code, 400)
+
+    def test_csv_download_lists_everyone(self):
+        self.client.force_login(self.host)
+        r = self.client.get(self.csv)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r["Content-Type"].startswith("text/csv"))
+        self.assertIn("attachment", r["Content-Disposition"])
+        rows = list(csv.reader(io.StringIO(r.content.decode())))
+        self.assertEqual(rows[0], ["Username", "Status", "Checked in", "Registered at"])
+        self.assertEqual({row[0]: row[1] for row in rows[1:]}, {"alice": "confirmed", "bob": "waitlisted"})
+
+    def test_csv_neutralises_spreadsheet_formulas(self):
+        evil = User.objects.create_user("+cmd", password="pw12345!")
+        register(self.event, evil, Registration.WAITLISTED)
+        self.client.force_login(self.host)
+        body = self.client.get(self.csv).content.decode()
+        self.assertIn("'+cmd", body)
+        self.assertNotIn("\n+cmd", body)
 
 
 class SignupTests(TestCase):
@@ -230,3 +484,9 @@ class SignupTests(TestCase):
         self.assertEqual(r.status_code, 302)
         self.assertTrue(User.objects.filter(username="newbie").exists())
         self.assertIn("_auth_user_id", self.client.session)
+
+    def test_custom_404_page_is_used(self):
+        with self.settings(DEBUG=False):
+            r = self.client.get("/definitely/not/here/")
+        self.assertEqual(r.status_code, 404)
+        self.assertContains(r, "Page not found", status_code=404)

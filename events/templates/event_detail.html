@@ -10,42 +10,68 @@
 
 <div class="row g-4">
   <div class="col-lg-8">
-    <span class="badge badge-category mb-2">{{ event.category.name }}</span>
-    <h1 class="mb-3">{{ event.title }}</h1>
-    <p class="text-body-secondary mb-1"><i class="bi bi-clock" aria-hidden="true"></i> {{ event.start_at|date:"l, d F Y, h:i A" }}</p>
-    <p class="text-body-secondary mb-4"><i class="bi bi-geo-alt" aria-hidden="true"></i> {{ event.venue }}</p>
-    <div class="mb-4">{{ event.description|linebreaks }}</div>
-    <p class="small text-body-secondary">Hosted by <strong>{{ event.organiser.username }}</strong></p>
+    <div class="detail-hero mb-4" style="--h: {{ event.hue }}">
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+        <span class="badge badge-category">{{ event.category.name }}</span>
+        {% if event.is_past %}<span class="badge text-bg-secondary">Ended</span>{% endif %}
+      </div>
+      <h1 class="detail-title mb-3">{{ event.title }}</h1>
+      <ul class="fact-list">
+        <li><i class="bi bi-clock" aria-hidden="true"></i> <span>{{ event.start_at|date:"l, d F Y" }}<br><small>{{ event.start_at|date:"h:i A" }}</small></span></li>
+        <li><i class="bi bi-geo-alt" aria-hidden="true"></i> <span>{{ event.venue }}</span></li>
+        <li><i class="bi bi-person-circle" aria-hidden="true"></i> <span>Hosted by <strong>{{ event.organiser.username }}</strong></span></li>
+      </ul>
+    </div>
+
+    <h2 class="h5">About this event</h2>
+    <div class="prose">{{ event.description|linebreaks }}</div>
   </div>
 
   <div class="col-lg-4">
-    <aside class="card side-card">
-      <div class="card-body">
-        <p class="mb-1 text-body-secondary">Seats left</p>
-        <p class="display-5 mb-3"><span id="seats-left">{{ event.seats_left }}</span> <span class="fs-6 text-body-secondary">of {{ event.capacity }}</span></p>
+    <div class="side-sticky">
+    <aside class="side-card" id="register-box"
+           data-state="{{ state }}" data-position="{{ position }}" data-capacity="{{ event.capacity }}"
+           data-full="{{ event.is_full|yesno:'1,0' }}" data-ended="{{ event.is_past|yesno:'1,0' }}"
+           data-register-url="{% url 'api_register' event.pk %}" data-cancel-url="{% url 'api_cancel' event.pk %}"
+           data-login-url="{% url 'login' %}?next={{ request.path }}" data-authenticated="{{ user.is_authenticated|yesno:'1,0' }}">
+      <p class="mb-1 text-body-secondary small">Seats left</p>
+      <p class="seat-big mb-2"><span id="seats-left">{{ event.seats_left }}</span> <span>of {{ event.capacity }}</span></p>
+      <div class="seat-bar mb-1" role="img" aria-label="{{ event.confirmed_count }} of {{ event.capacity }} seats taken"><span id="seat-fill" style="width: {{ event.fill_percent }}%"></span></div>
+      <p class="small text-body-secondary mb-3" id="waitlist-note">{% if event.waitlist_count %}{{ event.waitlist_count }} on the waitlist{% else %}Waitlist opens when the event is full{% endif %}</p>
 
-        {% if event.is_past %}
-          <button class="btn btn-secondary w-100" disabled>This event has ended</button>
-        {% elif user.is_authenticated %}
-          <button id="register-btn" type="button" class="btn w-100 {% if registered %}btn-outline-danger{% else %}btn-primary{% endif %}"
-                  data-register-url="{% url 'api_register' event.pk %}"
-                  data-cancel-url="{% url 'api_cancel' event.pk %}"
-                  data-registered="{{ registered|yesno:'1,0' }}">
-            {% if registered %}Cancel my registration{% else %}Register for this event{% endif %}
+      {% if event.is_past %}
+        <button class="btn btn-secondary w-100" disabled>This event has ended</button>
+      {% elif user.is_authenticated %}
+        <button id="register-btn" type="button" class="btn w-100"></button>
+      {% else %}
+        <a class="btn btn-primary w-100" href="{% url 'login' %}?next={{ request.path }}">Log in to register</a>
+      {% endif %}
+
+      <hr class="my-3">
+      <div class="d-grid gap-2">
+        <a class="btn btn-outline-primary" href="{% url 'event_calendar' event.pk %}"><i class="bi bi-calendar-plus" aria-hidden="true"></i> Add to calendar</a>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-primary flex-fill save-btn-wide" type="button" id="detail-save" aria-pressed="{{ saved|yesno:'true,false' }}" data-save-url="{% url 'api_save' event.pk %}">
+            <i class="bi {% if saved %}bi-heart-fill{% else %}bi-heart{% endif %}" aria-hidden="true"></i> <span>{% if saved %}Saved{% else %}Save{% endif %}</span>
           </button>
-          <p id="register-msg" class="small mt-2 mb-0" role="status" aria-live="polite"></p>
-        {% else %}
-          <a class="btn btn-primary w-100" href="{% url 'login' %}?next={{ request.path }}">Log in to register</a>
-        {% endif %}
+          <button class="btn btn-outline-primary flex-fill" type="button" id="share-btn" data-title="{{ event.title }}"><i class="bi bi-share" aria-hidden="true"></i> Share</button>
+        </div>
       </div>
     </aside>
 
-    {% if user == event.organiser %}
-      <div class="d-flex gap-2 mt-3">
-        <a class="btn btn-outline-primary flex-fill" href="{% url 'event_edit' event.pk %}">Edit</a>
-        <a class="btn btn-outline-danger flex-fill" href="{% url 'event_delete' event.pk %}">Delete</a>
+    {% if is_owner %}
+      <div class="side-card mt-3">
+        <p class="eyebrow mb-2">Host tools</p>
+        <div class="d-grid gap-2">
+          <a class="btn btn-primary" href="{% url 'event_attendees' event.pk %}"><i class="bi bi-people" aria-hidden="true"></i> Attendees ({{ event.confirmed_count }})</a>
+          <div class="d-flex gap-2">
+            <a class="btn btn-outline-primary flex-fill" href="{% url 'event_edit' event.pk %}">Edit</a>
+            <a class="btn btn-outline-danger flex-fill" href="{% url 'event_delete' event.pk %}">Delete</a>
+          </div>
+        </div>
       </div>
     {% endif %}
+    </div>
   </div>
 </div>
 {% endblock %}

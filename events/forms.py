@@ -3,7 +3,7 @@ from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.utils import timezone
 
-from .models import Event
+from .models import Event, Registration
 
 
 class EventForm(forms.ModelForm):
@@ -35,10 +35,10 @@ class EventForm(forms.ModelForm):
         if cap < 1:
             raise forms.ValidationError("Capacity must be at least 1.")
         if self.instance.pk:
-            booked = self.instance.registrations.count()
+            booked = self.instance.registrations.filter(status=Registration.CONFIRMED).count()
             if cap < booked:
                 raise forms.ValidationError(
-                    f"{booked} people have already registered, so capacity cannot go below that."
+                    f"{booked} people are already confirmed, so capacity cannot go below that."
                 )
         return cap
 

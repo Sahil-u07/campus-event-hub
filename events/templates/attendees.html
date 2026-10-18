@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Attendees: {{ event.title }} | Campus Event Hub{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Events</a></li>
+    <li class="breadcrumb-item"><a href="{{ event.get_absolute_url }}">{{ event.title }}</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Attendees</li>
+  </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <h1 class="h2 mb-0">Attendees</h1>
+  <a class="btn btn-accent" href="{% url 'event_attendees_csv' event.pk %}"><i class="bi bi-download" aria-hidden="true"></i> Download CSV</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><div class="stat"><span class="stat-num">{{ going|length }}</span><span class="stat-label">of {{ event.capacity }} seats taken</span></div></div>
+  <div class="col-6 col-md-3"><div class="stat"><span class="stat-num" id="checked-count">{{ checked_in }}</span><span class="stat-label">checked in</span></div></div>
+  <div class="col-6 col-md-3"><div class="stat"><span class="stat-num">{{ waiting|length }}</span><span class="stat-label">on the waitlist</span></div></div>
+  <div class="col-6 col-md-3"><div class="stat"><span class="stat-num">{{ event.seats_left }}</span><span class="stat-label">seats free</span></div></div>
+</div>
+
+<h2 class="h5">Confirmed</h2>
+{% if going %}
+  <div class="table-responsive mb-5">
+    <table class="table align-middle">
+      <thead><tr><th scope="col">Name</th><th scope="col">Registered</th><th scope="col" class="text-end">Checked in</th></tr></thead>
+      <tbody>
+        {% for r in going %}
+          <tr>
+            <td>{{ r.user.username }}</td>
+            <td>{{ r.created_at|date:"d M, h:i A" }}</td>
+            <td class="text-end">
+              <div class="form-check form-switch d-inline-block">
+                <input class="form-check-input checkin-box" type="checkbox" role="switch" id="ci-{{ r.pk }}" {% if r.checked_in %}checked{% endif %} data-url="{% url 'api_checkin' r.pk %}">
+                <label class="form-check-label visually-hidden" for="ci-{{ r.pk }}">Checked in: {{ r.user.username }}</label>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="text-body-secondary mb-5">Nobody has registered yet. Share the event link to get people in.</p>
+{% endif %}
+
+<h2 class="h5">Waitlist</h2>
+{% if waiting %}
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th scope="col">#</th><th scope="col">Name</th><th scope="col">Joined</th></tr></thead>
+      <tbody>
+        {% for r in waiting %}
+          <tr><td>{{ forloop.counter }}</td><td>{{ r.user.username }}</td><td>{{ r.created_at|date:"d M, h:i A" }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="text-body-secondary">The waitlist is empty.</p>
+{% endif %}
+{% endblock %}

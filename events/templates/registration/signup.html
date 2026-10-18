@@ -2,7 +2,8 @@
 {% block title %}Sign up | Campus Event Hub{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-md-6 col-lg-4">
+  <div class="col-md-8 col-lg-5">
+    <div class="form-card">
     <h1 class="h3 mb-4">Create your account</h1>
     <form method="post" novalidate>
       {% csrf_token %}
@@ -10,6 +11,7 @@
       <button class="btn btn-primary w-100" type="submit">Sign up</button>
     </form>
     <p class="mt-3 small">Already registered? <a href="{% url 'login' %}">Log in</a>.</p>
+    </div>
   </div>
 </div>
 {% endblock %}

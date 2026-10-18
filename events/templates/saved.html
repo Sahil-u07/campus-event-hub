@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Saved events | Campus Event Hub{% endblock %}
+{% block content %}
+<h1 class="h2 mb-4">Saved events</h1>
+{% if events %}
+  <div id="event-grid" class="row g-4">
+    {% for event in events %}
+      {% include "_event_card.html" %}
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <i class="bi bi-heart empty-icon" aria-hidden="true"></i>
+    <h2 class="h5 mt-3">Nothing saved yet</h2>
+    <p class="text-body-secondary mb-3">Tap the heart on an event to keep it here.</p>
+    <a class="btn btn-primary" href="{% url 'home' %}">Browse events</a>
+  </div>
+{% endif %}
+{% endblock %}

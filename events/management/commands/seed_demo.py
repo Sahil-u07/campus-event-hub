@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from events.models import Category, Event
+from events.models import Category, Event, Registration
 
 CATEGORIES = ["Tech", "Cultural", "Sports", "Workshop", "Career"]
 
@@ -27,6 +27,16 @@ EVENTS = [
     ("Git and GitHub Basics", "Workshop", "CS Lab 1", 4, 14, 3,
      "Branches, commits, pull requests. Small group, hands-on, so seats are limited."),
 ]
+
+
+# event title -> how many demo students are confirmed, and how many wait
+DEMO_CROWDS = {
+    "Git and GitHub Basics": (3, 2),
+    "Machine Learning Study Circle": (19, 0),
+    "Hack Night 2026": (31, 0),
+    "Intro to Django Workshop": (12, 0),
+    "Open Mic Evening": (60, 0),
+}
 
 
 class Command(BaseCommand):
@@ -52,4 +62,20 @@ class Command(BaseCommand):
                 ),
             )
             added += new
+
+        students = []
+        for i in range(1, 70):
+            u, made = User.objects.get_or_create(username=f"student{i:02d}")
+            if made:
+                u.set_unusable_password()
+                u.save()
+            students.append(u)
+        for title, (going, waiting) in DEMO_CROWDS.items():
+            event = Event.objects.get(title=title)
+            if event.registrations.exists():
+                continue
+            for u in students[:going]:
+                Registration.objects.create(event=event, user=u, status=Registration.CONFIRMED)
+            for u in students[going:going + waiting]:
+                Registration.objects.create(event=event, user=u, status=Registration.WAITLISTED)
         self.stdout.write(f"{added} new event(s) added.")

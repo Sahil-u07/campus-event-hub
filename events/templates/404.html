@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Page not found | Campus Event Hub{% endblock %}
+{% block content %}
+<div class="empty-state py-5">
+  <p class="display-3 fw-bold grad-text mb-0">404</p>
+  <h1 class="h4 mt-2">Page not found</h1>
+  <p class="text-body-secondary mb-4">That page does not exist, or the event was removed.</p>
+  <a class="btn btn-primary" href="{% url 'home' %}">Back to events</a>
+</div>
+{% endblock %}

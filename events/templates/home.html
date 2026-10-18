@@ -1,35 +1,76 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="hero rounded-4 p-4 p-md-5 mb-4">
-  <h1 class="display-6 mb-2">What's happening on campus?</h1>
-  <p class="lead mb-4">Find a workshop, match or meetup, grab a seat, and host your own.</p>
+<section class="hero mb-4">
+  <p class="eyebrow mb-2">Manipal University Jaipur</p>
+  <h1 class="hero-title mb-3">Find your next <span class="grad-text">campus moment</span>.</h1>
+  <p class="hero-sub mb-4">Workshops, matches, meetups and more. Grab a seat, or join the waitlist and get moved up automatically.</p>
 
-  <form id="filter-form" method="get" action="{% url 'home' %}" data-api-url="{% url 'api_events' %}" class="row g-2" role="search">
-    <div class="col-12 col-md-7">
+  <form id="filter-form" method="get" action="{% url 'home' %}" data-api-url="{% url 'api_events' %}" role="search">
+    <div class="search-box mb-3">
+      <i class="bi bi-search" aria-hidden="true"></i>
       <label for="q" class="visually-hidden">Search events</label>
-      <input id="q" name="q" type="search" value="{{ q }}" class="form-control form-control-lg" placeholder="Search events">
+      <input id="q" name="q" type="search" value="{{ filters.q }}" class="form-control form-control-lg" placeholder="Search events" autocomplete="off">
+      <button class="btn btn-primary" type="submit">Search</button>
     </div>
-    <div class="col-8 col-md-3">
-      <label for="category" class="visually-hidden">Category</label>
-      <select id="category" name="category" class="form-select form-select-lg">
-        <option value="">All categories</option>
+
+    <div class="filter-panel">
+      <fieldset class="chip-group" aria-label="Category">
+        <legend class="visually-hidden">Category</legend>
+        <label class="chip"><input type="radio" name="category" value="" {% if not filters.category %}checked{% endif %}><span>All</span></label>
         {% for c in categories %}
-          <option value="{{ c.pk }}" {% if category == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+          <label class="chip"><input type="radio" name="category" value="{{ c.pk }}" {% if filters.category == c.pk|stringformat:"s" %}checked{% endif %}><span>{{ c.name }}</span></label>
         {% endfor %}
-      </select>
-    </div>
-    <div class="col-4 col-md-2 d-grid">
-      <button class="btn btn-primary btn-lg" type="submit">Search</button>
+      </fieldset>
+
+      <div class="filter-row">
+        <fieldset class="chip-group" aria-label="When">
+          <legend class="visually-hidden">When</legend>
+          <label class="chip"><input type="radio" name="when" value="" {% if not filters.when %}checked{% endif %}><span>Any time</span></label>
+          <label class="chip"><input type="radio" name="when" value="today" {% if filters.when == "today" %}checked{% endif %}><span>Today</span></label>
+          <label class="chip"><input type="radio" name="when" value="week" {% if filters.when == "week" %}checked{% endif %}><span>This week</span></label>
+          <label class="chip"><input type="radio" name="when" value="later" {% if filters.when == "later" %}checked{% endif %}><span>Later</span></label>
+        </fieldset>
+
+        <div class="d-flex flex-wrap align-items-center gap-3 ms-lg-auto">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="available" name="available" value="1" {% if filters.available %}checked{% endif %}>
+            <label class="form-check-label" for="available">Seats available</label>
+          </div>
+          <div>
+            <label for="sort" class="visually-hidden">Sort by</label>
+            <select id="sort" name="sort" class="form-select form-select-sm">
+              <option value="soonest" {% if filters.sort == "soonest" %}selected{% endif %}>Soonest first</option>
+              <option value="popular" {% if filters.sort == "popular" %}selected{% endif %}>Most popular</option>
+            </select>
+          </div>
+        </div>
+      </div>
     </div>
   </form>
 </section>
 
-<p id="result-count" class="text-body-secondary" aria-live="polite">{{ events|length }} upcoming event{{ events|length|pluralize }}</p>
+<p id="result-count" class="text-body-secondary mb-3" aria-live="polite">{{ total }} upcoming event{{ total|pluralize }}</p>
 
-<div id="event-grid" class="row g-4">
+<div id="event-grid" class="row g-4" aria-busy="false">
   {% for event in events %}
     {% include "_event_card.html" %}
   {% endfor %}
 </div>
-<p id="empty-note" class="text-center text-body-secondary py-5 {% if events %}d-none{% endif %}">No events match your search yet.</p>
+
+<div id="empty-note" class="empty-state {% if events %}d-none{% endif %}">
+  <svg width="96" height="96" viewBox="0 0 96 96" fill="none" aria-hidden="true">
+    <rect x="14" y="20" width="68" height="60" rx="12" stroke="currentColor" stroke-width="3" opacity=".5"/>
+    <path d="M14 38h68" stroke="currentColor" stroke-width="3" opacity=".5"/>
+    <path d="M32 12v14M64 12v14" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity=".5"/>
+    <circle cx="48" cy="58" r="9" stroke="currentColor" stroke-width="3"/>
+    <path d="m55 65 8 8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+  </svg>
+  <h2 class="h5 mt-3">No events match yet</h2>
+  <p class="text-body-secondary mb-3">Try a different search, or clear the filters.</p>
+  <a class="btn btn-outline-primary" href="{% url 'home' %}">Clear filters</a>
+</div>
+
+<div class="text-center mt-4 {% if not has_next %}d-none{% endif %}" id="load-more-wrap">
+  <button id="load-more" type="button" class="btn btn-outline-primary px-4" data-next-page="2">Load more events</button>
+</div>
 {% endblock %}

@@ -277,3 +277,10 @@ a.list-row:hover, .list-row:hover { transform: translateX(3px); }
   display: grid; place-items: center; border: 0; background: transparent; color: var(--muted); border-radius: .6rem; cursor: pointer;
 }
 .pw-toggle:hover { color: var(--text); background: var(--surface-2); }
+
+@media (max-width: 575.98px) {
+  .search-box { flex-wrap: wrap; }
+  .search-box .form-control { flex: 1 1 100%; }
+  .search-box .btn { flex: 1 1 100%; }
+  .search-box > i { top: 24px; }
+}

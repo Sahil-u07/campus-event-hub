@@ -6,7 +6,17 @@ from django.utils import timezone
 from .models import Event, Registration
 
 
-class EventForm(forms.ModelForm):
+class BootstrapFormMixin:
+    """Give every field the Bootstrap look."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            css = "form-select" if isinstance(field.widget, forms.Select) else "form-control"
+            field.widget.attrs["class"] = css
+
+
+class EventForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Event
         fields = ["title", "category", "description", "venue", "start_at", "capacity"]
@@ -20,9 +30,6 @@ class EventForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["start_at"].input_formats = ["%Y-%m-%dT%H:%M"]
-        for name, field in self.fields.items():
-            css = "form-select" if name == "category" else "form-control"
-            field.widget.attrs["class"] = css
 
     def clean_start_at(self):
         when = self.cleaned_data["start_at"]
@@ -43,19 +50,34 @@ class EventForm(forms.ModelForm):
         return cap
 
 
-class LoginForm(AuthenticationForm):
+class LoginForm(BootstrapFormMixin, AuthenticationForm):
+    error_messages = {
+        **AuthenticationForm.error_messages,
+        "invalid_login": (
+            "Wrong username or password. Check for typos, or create an account "
+            "if you have not signed up on this site yet."
+        ),
+    }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs["class"] = "form-control"
+        self.fields["username"].widget.attrs["autofocus"] = True
 
 
-class SignupForm(UserCreationForm):
+class SignupForm(BootstrapFormMixin, UserCreationForm):
     class Meta:
         model = User
         fields = ["username"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs["class"] = "form-control"
+        self.fields["username"].help_text = "Letters, digits and @ . + - _ only, with no spaces."
+        self.fields["password1"].help_text = "At least 8 characters. Not a common password and not only numbers."
+        self.fields["password2"].help_text = "Type the same password again."
+
+    def add_error(self, field, error):
+        # Django files the password-rule errors under the confirmation box. When both boxes
+        # match, any error on the confirmation is a rule error, so show it under "Password".
+        if field == "password2" and self.cleaned_data.get("password1") == self.data.get("password2"):
+            field = "password1"
+        super().add_error(field, error)

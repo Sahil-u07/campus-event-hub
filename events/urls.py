@@ -16,7 +16,7 @@ urlpatterns = [
     path("mine/", views.my_events, name="my_events"),
     path("saved/", views.saved_events, name="saved_events"),
     path("signup/", views.signup, name="signup"),
-    path("login/", auth_views.LoginView.as_view(authentication_form=LoginForm), name="login"),
+    path("login/", auth_views.LoginView.as_view(authentication_form=LoginForm, redirect_authenticated_user=True), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("api/events/", views.api_events, name="api_events"),
     path("api/events/<int:pk>/register/", views.api_register, name="api_register"),

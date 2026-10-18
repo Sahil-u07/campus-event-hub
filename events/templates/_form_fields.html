@@ -1,11 +1,22 @@
-{% if form.non_field_errors %}
-  <div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>
+{% if form.errors %}
+  <div class="form-alert" id="form-errors" role="alert" tabindex="-1">
+    <strong><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Please fix the problems below</strong>
+    <ul>
+      {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+      {% for field in form %}{% for error in field.errors %}
+        <li><a href="#{{ field.id_for_label }}">{{ field.label }}</a>: {{ error }}</li>
+      {% endfor %}{% endfor %}
+    </ul>
+    {% if form.non_field_errors and request.resolver_match.url_name == 'login' %}
+      <a class="btn btn-sm btn-accent mt-2" href="{% url 'signup' %}">Create an account</a>
+    {% endif %}
+  </div>
 {% endif %}
 {% for field in form %}
   <div class="mb-3">
     <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
     {{ field }}
     {% if field.help_text %}<div class="form-text">{{ field.help_text|safe }}</div>{% endif %}
-    {% for error in field.errors %}<div class="text-danger small mt-1" role="alert">{{ error }}</div>{% endfor %}
+    {% for error in field.errors %}<div class="field-error"><i class="bi bi-x-circle-fill" aria-hidden="true"></i> {{ error }}</div>{% endfor %}
   </div>
 {% endfor %}

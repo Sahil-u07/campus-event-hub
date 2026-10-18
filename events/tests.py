@@ -490,3 +490,101 @@ class SignupTests(TestCase):
             r = self.client.get("/definitely/not/here/")
         self.assertEqual(r.status_code, 404)
         self.assertContains(r, "Page not found", status_code=404)
+
+
+class AuthPageTests(TestCase):
+    def test_wrong_login_shows_a_clear_error_summary(self):
+        r = self.client.post(reverse("login"), {"username": "nobody", "password": "wrong-pass-1"})
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'id="form-errors"')
+        self.assertContains(r, 'role="alert"')
+        self.assertContains(r, "Wrong username or password")
+        self.assertContains(r, reverse("signup"))  # points people without an account to sign up
+
+    def test_signup_with_a_weak_password_lists_every_problem_at_the_top(self):
+        r = self.client.post(
+            reverse("signup"),
+            {"username": "weakling", "password1": "12345678", "password2": "12345678"},
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'id="form-errors"')
+        self.assertContains(r, "This password is too common.")
+        self.assertContains(r, "This password is entirely numeric.")
+        self.assertFalse(User.objects.filter(username="weakling").exists())
+
+    def test_invalid_fields_are_marked_for_screen_readers(self):
+        r = self.client.post(
+            reverse("signup"),
+            {"username": "ok_name", "password1": "Str0ng-pass-9", "password2": "different"},
+        )
+        self.assertContains(r, 'aria-invalid="true"')
+
+    def test_password_rules_are_short_hints_not_a_long_list(self):
+        r = self.client.get(reverse("signup"))
+        self.assertContains(r, "At least 8 characters")
+        self.assertNotContains(r, "can’t be too similar to your other personal information")
+
+    def test_inputs_have_autofill_hints(self):
+        login = self.client.get(reverse("login")).content.decode()
+        self.assertIn('autocomplete="username"', login)
+        self.assertIn('autocomplete="current-password"', login)
+        signup = self.client.get(reverse("signup")).content.decode()
+        self.assertIn('autocomplete="new-password"', signup)
+
+    def test_signed_in_user_is_sent_away_from_the_login_page(self):
+        self.client.force_login(make_user("already"))
+        r = self.client.get(reverse("login"))
+        self.assertRedirects(r, reverse("home"), fetch_redirect_response=False)
+
+    def test_login_then_next_page_shows_the_user_over_https_behind_a_proxy(self):
+        make_user("sahil")
+        with self.settings(
+            SESSION_COOKIE_SECURE=True, CSRF_COOKIE_SECURE=True,
+            SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"),
+        ):
+            proxy = {"secure": True, "HTTP_X_FORWARDED_PROTO": "https"}
+            r = self.client.post(
+                reverse("login"), {"username": "sahil", "password": "pw12345!"}, **proxy
+            )
+            self.assertEqual(r.status_code, 302)
+            home = self.client.get(reverse("home"), **proxy)
+        self.assertContains(home, "Log out")
+        self.assertContains(home, "sahil")
+
+    def test_login_with_next_goes_back_to_that_page(self):
+        make_user("sahil")
+        event = make_event(make_user("host"))
+        url = reverse("event_detail", args=[event.pk])
+        r = self.client.post(
+            reverse("login") + f"?next={url}", {"username": "sahil", "password": "pw12345!", "next": url}
+        )
+        self.assertRedirects(r, url, fetch_redirect_response=False)
+
+
+class HostedDatabaseUrlTests(TestCase):
+    def test_supabase_pooler_option_is_removed_from_the_url(self):
+        from campushub.settings import _clean_db_url
+
+        cleaned = _clean_db_url("postgres://u:p@h:6543/db?sslmode=require&supa=base-pooler.x")
+        self.assertIn("sslmode=require", cleaned)
+        self.assertNotIn("supa=", cleaned)
+
+    def test_empty_value_stays_empty(self):
+        from campushub.settings import _clean_db_url
+
+        self.assertEqual(_clean_db_url(""), "")
+
+
+class SignupPasswordErrorPlacementTests(TestCase):
+    def post(self, p1, p2):
+        return self.client.post(reverse("signup"), {"username": "someone", "password1": p1, "password2": p2})
+
+    def test_password_rule_errors_point_at_the_password_field(self):
+        form = self.post("12345678", "12345678").context["form"]
+        self.assertIn("This password is too common.", form.errors["password1"])
+        self.assertNotIn("password2", form.errors)
+
+    def test_mismatch_error_stays_on_the_confirmation_field(self):
+        form = self.post("Str0ng-pass-9", "Str0ng-pass-8").context["form"]
+        self.assertIn("password2", form.errors)
+        self.assertNotIn("password1", form.errors)

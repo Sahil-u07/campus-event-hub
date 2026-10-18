@@ -38,6 +38,22 @@ $(function () {
     toast(message, "info", { href: $("body").data("login-url"), label: "Log in" });
   }
 
+  // ---- forms: show/hide password, focus the error summary ----
+  $("input[type=password]").each(function () {
+    var $input = $(this);
+    var $wrap = $('<div class="pw-wrap"></div>');
+    $input.wrap($wrap);
+    var $btn = $('<button type="button" class="pw-toggle" aria-pressed="false" aria-label="Show password"><i class="bi bi-eye" aria-hidden="true"></i></button>');
+    $input.after($btn);
+    $btn.on("click", function () {
+      var show = $input.attr("type") === "password";
+      $input.attr("type", show ? "text" : "password");
+      $btn.attr({ "aria-pressed": show, "aria-label": show ? "Hide password" : "Show password" });
+      $btn.find("i").toggleClass("bi-eye", !show).toggleClass("bi-eye-slash", show);
+    });
+  });
+  $("#form-errors").trigger("focus");
+
   // ---- theme toggle ----
   var $toggle = $("#theme-toggle");
   function syncToggle() {

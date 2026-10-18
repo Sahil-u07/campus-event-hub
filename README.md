@@ -127,7 +127,9 @@ Vercel finds `manage.py` and runs the project as a serverless function. Its disk
 | `SECRET_KEY` | A long random string |
 | `CSRF_TRUSTED_ORIGINS` | `https://<your-project>.vercel.app` |
 
-`DEBUG` is off automatically on Vercel. After the first deploy, run `python manage.py migrate` and `python manage.py seed_demo` once against that database.
+`DEBUG` is off automatically on Vercel. `vercel.json` runs `migrate` and `seed_demo` on every deploy, so the tables and the sample events are created in the hosted database without any manual step (`seed_demo` skips events that already exist).
+
+Steps: push the repo to GitHub, import it at vercel.com/new, add a PostgreSQL database from the Vercel Storage tab (this sets `DATABASE_URL` for you), add `SECRET_KEY` and `CSRF_TRUSTED_ORIGINS`, then deploy.
 
 ## Known limits
 

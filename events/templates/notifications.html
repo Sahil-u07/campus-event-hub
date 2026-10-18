@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Notifications | Campus Event Hub{% endblock %}
+{% block content %}
+<h1 class="h2 mb-4">Notifications</h1>
+{% if items %}
+  <div class="list-stack">
+    {% for n in items %}
+      <div class="note-row {% if n.pk in unread %}note-new{% endif %}">
+        <i class="bi {% if n.pk in unread %}bi-bell-fill{% else %}bi-bell{% endif %} note-icon" aria-hidden="true"></i>
+        <div>
+          {% if n.url %}<a class="note-text" href="{{ n.url }}">{{ n.message }}</a>{% else %}<span class="note-text">{{ n.message }}</span>{% endif %}
+          <span class="note-time">{% with t=n.created_at|timesince %}{% if t == "0 minutes" %}just now{% else %}{{ t }} ago{% endif %}{% endwith %}{% if n.pk in unread %} &middot; new{% endif %}</span>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <i class="bi bi-bell empty-icon" aria-hidden="true"></i>
+    <h2 class="h5 mt-3">You are all caught up</h2>
+    <p class="text-body-secondary mb-0">When a waitlist seat opens up for you, or an event you joined is cancelled, it shows here.</p>
+  </div>
+{% endif %}
+{% endblock %}

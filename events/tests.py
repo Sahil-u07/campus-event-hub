@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Category, Event, Registration, SavedEvent
+from .models import Category, Event, Notification, Registration, SavedEvent
 
 
 def make_event(organiser, **kw):
@@ -588,3 +588,121 @@ class SignupPasswordErrorPlacementTests(TestCase):
         form = self.post("Str0ng-pass-9", "Str0ng-pass-8").context["form"]
         self.assertIn("password2", form.errors)
         self.assertNotIn("password1", form.errors)
+
+
+class NotificationTests(TestCase):
+    def setUp(self):
+        self.host = make_user("host")
+        self.u1, self.u2, self.u3 = make_user("u1"), make_user("u2"), make_user("u3")
+        self.event = make_event(self.host, title="Hack Night", capacity=1)
+        register(self.event, self.u1)
+        self.waiting = register(self.event, self.u2, Registration.WAITLISTED)
+        register(self.event, self.u3, Registration.WAITLISTED)
+
+    def cancel_as(self, user):
+        self.client.force_login(user)
+        return self.client.post(reverse("api_cancel", args=[self.event.pk]))
+
+    def test_promoted_person_is_notified_and_nobody_else(self):
+        self.cancel_as(self.u1)
+        mine = Notification.objects.filter(user=self.u2)
+        self.assertEqual(mine.count(), 1)
+        self.assertIn("Hack Night", mine[0].message)
+        self.assertIn("seat", mine[0].message)
+        self.assertEqual(mine[0].url, self.event.get_absolute_url())
+        self.assertFalse(Notification.objects.filter(user__in=[self.u1, self.u3, self.host]).exists())
+
+    def test_raising_capacity_notifies_the_people_it_promotes(self):
+        self.client.force_login(self.host)
+        when = timezone.localtime(self.event.start_at).strftime("%Y-%m-%dT%H:%M")
+        self.client.post(reverse("event_edit", args=[self.event.pk]), dict(
+            title="Hack Night", description="x", venue="Lab 2", start_at=when,
+            capacity=3, category=self.event.category.pk))
+        self.assertEqual(Notification.objects.filter(message__contains="seat").count(), 2)
+
+    def test_deleting_an_event_tells_everyone_registered_but_not_the_host(self):
+        self.client.force_login(self.host)
+        self.client.post(reverse("event_delete", args=[self.event.pk]))
+        who = set(Notification.objects.values_list("user__username", flat=True))
+        self.assertEqual(who, {"u1", "u2", "u3"})
+        self.assertIn("cancelled", Notification.objects.first().message)
+
+    def test_page_requires_login(self):
+        self.assertEqual(self.client.get(reverse("notifications")).status_code, 302)
+
+    def test_page_lists_only_my_notifications_and_marks_them_read(self):
+        Notification.objects.create(user=self.u2, message="For u2")
+        Notification.objects.create(user=self.u3, message="For u3")
+        self.client.force_login(self.u2)
+        r = self.client.get(reverse("notifications"))
+        self.assertContains(r, "For u2")
+        self.assertNotContains(r, "For u3")
+        self.assertFalse(Notification.objects.get(user=self.u2).read_at is None)
+        self.assertTrue(Notification.objects.get(user=self.u3).read_at is None)
+
+    def test_bell_shows_unread_count_until_the_page_is_opened(self):
+        Notification.objects.create(user=self.u2, message="one")
+        Notification.objects.create(user=self.u2, message="two")
+        self.client.force_login(self.u2)
+        self.assertContains(self.client.get(reverse("home")), 'data-unread="2"')
+        self.client.get(reverse("notifications"))
+        self.assertContains(self.client.get(reverse("home")), 'data-unread="0"')
+
+    def test_bell_is_hidden_for_visitors(self):
+        self.assertNotContains(self.client.get(reverse("home")), "data-unread")
+
+
+class EmailNotificationTests(TestCase):
+    def setUp(self):
+        self.host = make_user("host")
+        self.event = make_event(self.host, title="Hack Night", capacity=1)
+
+    def promote(self, user):
+        reg = register(self.event, user, Registration.WAITLISTED)
+        self.event.promote_waitlist()
+        return reg
+
+    def test_email_is_sent_when_mail_is_configured_and_the_user_has_an_address(self):
+        user = User.objects.create_user("mailme", email="mailme@example.com", password="pw12345!")
+        with self.settings(EMAIL_HOST="smtp.example.com"):
+            self.promote(user)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["mailme@example.com"])
+        self.assertIn("Hack Night", mail.outbox[0].subject)
+
+    def test_no_email_when_mail_is_not_configured(self):
+        user = User.objects.create_user("mailme", email="mailme@example.com", password="pw12345!")
+        with self.settings(EMAIL_HOST=""):
+            self.promote(user)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(Notification.objects.filter(user=user).count(), 1)
+
+    def test_no_email_when_the_user_gave_no_address(self):
+        with self.settings(EMAIL_HOST="smtp.example.com"):
+            self.promote(make_user("noaddress"))
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_a_failing_mail_server_does_not_break_the_promotion(self):
+        user = User.objects.create_user("mailme", email="mailme@example.com", password="pw12345!")
+        with self.settings(EMAIL_HOST="smtp.example.com", EMAIL_BACKEND="events.tests.BrokenBackend"):
+            reg = self.promote(user)
+        reg.refresh_from_db()
+        self.assertEqual(reg.status, Registration.CONFIRMED)
+        self.assertEqual(Notification.objects.filter(user=user).count(), 1)
+
+    def test_signup_accepts_an_optional_email(self):
+        base = {"password1": "Str0ng-pass-9", "password2": "Str0ng-pass-9"}
+        self.client.post(reverse("signup"), {"username": "with_mail", "email": "a@example.com", **base})
+        self.client.logout()
+        self.client.post(reverse("signup"), {"username": "no_mail", **base})
+        self.assertEqual(User.objects.get(username="with_mail").email, "a@example.com")
+        self.assertTrue(User.objects.filter(username="no_mail").exists())
+
+
+from django.core import mail  # noqa: E402
+from django.core.mail.backends.base import BaseEmailBackend  # noqa: E402
+
+
+class BrokenBackend(BaseEmailBackend):
+    def send_messages(self, email_messages):
+        raise OSError("mail server is down")

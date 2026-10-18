@@ -1,7 +1,12 @@
+import logging
+
 from django.conf import settings
+from django.core.mail import send_mail
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 class Category(models.Model):
@@ -78,9 +83,14 @@ class Event(models.Model):
         if free <= 0:
             return
         queue = self.registrations.filter(status=Registration.WAITLISTED).order_by("created_at", "id")
-        for reg in queue[:free]:
+        for reg in list(queue[:free]):
             reg.status = Registration.CONFIRMED
             reg.save(update_fields=["status"])
+            Notification.send(
+                reg.user,
+                f'Good news: a seat opened up for "{self.title}" and you are now confirmed.',
+                self.get_absolute_url(),
+            )
 
 
 class Registration(models.Model):
@@ -130,3 +140,32 @@ class SavedEvent(models.Model):
 
     def __str__(self):
         return f"{self.user} saved {self.event}"
+
+
+class Notification(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications"
+    )
+    message = models.CharField(max_length=250)
+    url = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.user}: {self.message}"
+
+    @classmethod
+    def send(cls, user, message, url=""):
+        """Save an in-app notification and, if mail is set up, email it too."""
+        note = cls.objects.create(user=user, message=message, url=url)
+        if user.email and settings.EMAIL_HOST:
+            # shortcut: sent inside the request, so a slow mail server adds up to EMAIL_TIMEOUT
+            # seconds; move to a background queue if volume grows.
+            try:
+                send_mail(message, f"{message}\n\n{settings.SITE_URL}{url}", None, [user.email])
+            except Exception:
+                logger.exception("Could not email notification %s", note.pk)
+        return note

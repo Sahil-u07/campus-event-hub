@@ -67,10 +67,12 @@ class LoginForm(BootstrapFormMixin, AuthenticationForm):
 class SignupForm(BootstrapFormMixin, UserCreationForm):
     class Meta:
         model = User
-        fields = ["username"]
+        fields = ["username", "email"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["email"].help_text = "Optional. Only used to email you when a waitlist seat opens up."
+        self.fields["email"].widget.attrs["autocomplete"] = "email"
         self.fields["username"].help_text = "Letters, digits and @ . + - _ only, with no spaces."
         self.fields["password1"].help_text = "At least 8 characters. Not a common password and not only numbers."
         self.fields["password2"].help_text = "Type the same password again."

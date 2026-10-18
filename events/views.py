@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .forms import EventForm, SignupForm
-from .models import Category, Event, Registration, SavedEvent
+from .models import Category, Event, Notification, Registration, SavedEvent
 
 PAGE_SIZE = 9
 SORTS = {"soonest", "popular"}
@@ -163,6 +163,8 @@ def event_delete(request, pk):
     if event.organiser_id != request.user.id:
         raise PermissionDenied
     if request.method == "POST":
+        for reg in event.registrations.select_related("user").exclude(user=request.user):
+            Notification.send(reg.user, f'"{event.title}" was cancelled by the host.')
         event.delete()
         messages.success(request, "Event deleted.")
         return redirect("my_events")
@@ -191,6 +193,14 @@ def saved_events(request):
     for e in events:
         e.saved = True
     return render(request, "saved.html", {"events": events})
+
+
+@login_required
+def notifications(request):
+    items = list(Notification.objects.filter(user=request.user)[:50])
+    unread = {n.pk for n in items if n.read_at is None}
+    Notification.objects.filter(user=request.user, read_at__isnull=True).update(read_at=timezone.now())
+    return render(request, "notifications.html", {"items": items, "unread": unread})
 
 
 def signup(request):

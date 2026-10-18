@@ -284,3 +284,18 @@ a.list-row:hover, .list-row:hover { transform: translateX(3px); }
   .search-box .btn { flex: 1 1 100%; }
   .search-box > i { top: 24px; }
 }
+
+/* ---------- notifications ---------- */
+.bell { position: relative; }
+.bell-badge {
+  position: absolute; top: 0; right: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); font-size: .7rem; font-weight: 800; line-height: 18px; text-align: center;
+}
+@media (max-width: 767.98px) { .bell-badge { position: static; display: inline-block; margin-left: .4rem; } }
+.note-row { display: flex; gap: .9rem; align-items: flex-start; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
+.note-row.note-new { border-left: 4px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.note-icon { font-size: 1.2rem; color: var(--link); margin-top: .1rem; }
+.note-new .note-icon { color: var(--accent); }
+.note-text { display: block; color: var(--text); font-weight: 600; text-decoration: none; }
+a.note-text:hover { text-decoration: underline; }
+.note-time { display: block; color: var(--muted); font-size: .85rem; margin-top: .15rem; }

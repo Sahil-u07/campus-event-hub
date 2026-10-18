@@ -22,7 +22,7 @@ On a phone (375px wide):
 - Live search with no page reload. Filter by category and by when (today, this week, later), show only events with seats, and sort by soonest or most popular. The filters stay in the URL, so a filtered view can be shared. Results load nine at a time with a "Load more" button.
 - Register with one click. If an event is full you join the **waitlist** and see your position. When someone cancels, the first person on the waitlist is confirmed automatically.
 - Save events with a heart button, see them on the Saved page, and download an `.ics` file to add an event to any calendar. (Events have no end time, so the calendar entry is two hours long.)
-- "My events" shows what you are going to, your waitlist positions and what you host.
+- **Notifications:** a bell in the menu shows unread alerts, for example when a waitlist seat opens up for you or an event you joined is cancelled. If you add an email address when you sign up (optional) and the site has mail settings, you also get an email.
 - Dark and light themes. The first visit follows your system setting and the toggle remembers your choice.
 
 **For hosts**
@@ -85,7 +85,7 @@ erDiagram
     }
 ```
 
-`Registration` has a unique pair (event, user), so one person cannot take two seats. Its `status` is `confirmed` or `waitlisted`, and `checked_in` is set by the host. `SavedEvent` links a user to an event they saved, also unique per pair.
+`Registration` has a unique pair (event, user), so one person cannot take two seats. Its `status` is `confirmed` or `waitlisted`, and `checked_in` is set by the host. `SavedEvent` links a user to an event they saved, also unique per pair. `Notification` holds a message for one user, a link and a read time.
 
 ## Pages and API
 
@@ -96,6 +96,7 @@ erDiagram
 | `/events/new/`, `/events/<id>/edit/`, `/events/<id>/delete/` | Host, edit, delete (owner only) |
 | `/mine/` | Going, waitlist and hosted events |
 | `/saved/` | Saved events |
+| `/notifications/` | Notification list (opening it marks everything read) |
 | `/events/<id>/attendees/` | Host dashboard with check-in (owner only) |
 | `/events/<id>/attendees.csv` | CSV download (owner only) |
 | `/events/<id>/calendar.ics` | Add to calendar |
@@ -136,7 +137,7 @@ set DB_PASSWORD=your-password
 set DB_HOST=127.0.0.1
 ```
 
-**Tests:** `python manage.py test` (70 tests: registration and waitlist rules, JSON API, filters and paging, saved events, calendar file, host dashboard and CSV, permissions, forms; they run on in-memory SQLite).
+**Tests:** `python manage.py test` (82 tests: registration and waitlist rules, notifications and email, JSON API, filters and paging, saved events, calendar file, host dashboard and CSV, permissions, forms; they run on in-memory SQLite).
 
 ## Deployment (Vercel)
 
@@ -148,12 +149,12 @@ Vercel finds `manage.py` and runs the project as a serverless function. Its disk
 | `SECRET_KEY` | A long random string |
 | `CSRF_TRUSTED_ORIGINS` | `https://campus-event-hub-lake.vercel.app` |
 
-`DEBUG` is off automatically on Vercel. `vercel.json` runs `migrate` and `seed_demo` on every deploy, so the tables and the sample events are created in the hosted database without any manual step (`seed_demo` skips events that already exist).
+To send emails as well, add `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` and `SITE_URL` (the address of the site, used for the links in emails). Without `EMAIL_HOST` nothing is emailed. `DEBUG` is off automatically on Vercel. `vercel.json` runs `migrate` and `seed_demo` on every deploy, so the tables and the sample events are created in the hosted database without any manual step (`seed_demo` skips events that already exist).
 
 Steps: push the repo to GitHub, import it at vercel.com/new, add a Supabase PostgreSQL database from the Vercel Storage tab (this sets `POSTGRES_URL` for you), add `SECRET_KEY` and `CSRF_TRUSTED_ORIGINS`, then deploy.
 
 ## Known limits
 
 - Free hosting can be slow on the first request after idle time.
-- There are no email notifications, so waitlist promotions show up on the site only.
+- There is no SMS (it needs a paid provider). Emails are sent only when the site has mail settings and the person gave an address at sign up. The live site has no mail settings yet, so there the alerts show in the notification bell only.
 - Events have no poster images, because the hosting disk is read-only.

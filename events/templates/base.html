@@ -44,6 +44,7 @@
         <ul class="navbar-nav ms-md-auto me-md-3 align-items-md-center gap-md-1">
           <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}" href="{% url 'home' %}">Events</a></li>
           {% if user.is_authenticated %}
+            <li class="nav-item"><a class="nav-link bell {% if request.resolver_match.url_name == 'notifications' %}active{% endif %}" href="{% url 'notifications' %}" data-unread="{{ unread_count|default:0 }}" aria-label="Notifications, {{ unread_count|default:0 }} unread"><i class="bi bi-bell" aria-hidden="true"></i>{% if unread_count %}<span class="bell-badge">{{ unread_count }}</span>{% endif %}<span class="d-md-none ms-1">Notifications</span></a></li>
             <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'saved_events' %}active{% endif %}" href="{% url 'saved_events' %}"><i class="bi bi-heart" aria-hidden="true"></i> Saved</a></li>
             <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'my_events' %}active{% endif %}" href="{% url 'my_events' %}">My events</a></li>
             <li class="nav-item ms-md-2"><a class="btn btn-accent btn-sm" href="{% url 'event_create' %}"><i class="bi bi-plus-lg" aria-hidden="true"></i> Host an event</a></li>

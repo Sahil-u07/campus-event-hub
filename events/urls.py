@@ -15,6 +15,7 @@ urlpatterns = [
     path("events/<int:pk>/calendar.ics", views.event_calendar, name="event_calendar"),
     path("mine/", views.my_events, name="my_events"),
     path("saved/", views.saved_events, name="saved_events"),
+    path("notifications/", views.notifications, name="notifications"),
     path("signup/", views.signup, name="signup"),
     path("login/", auth_views.LoginView.as_view(authentication_form=LoginForm, redirect_authenticated_user=True), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),

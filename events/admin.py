@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Category, Event, Registration, SavedEvent
+from .models import Category, Event, Notification, Registration, SavedEvent
 
 
 @admin.register(Category)
@@ -27,3 +27,9 @@ class RegistrationAdmin(admin.ModelAdmin):
 class SavedEventAdmin(admin.ModelAdmin):
     list_display = ["user", "event", "created_at"]
     search_fields = ["user__username", "event__title"]
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ["user", "message", "created_at", "read_at"]
+    search_fields = ["user__username", "message"]
